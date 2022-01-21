@@ -2,9 +2,16 @@
 % Please edit documentation in R/cross_bispectra.R
 \name{cross_bicoherence}
 \alias{cross_bicoherence}
-\title{Estimate cross-coherence from time series data.}
+\title{Estimate cross-bicoherence from time series data.}
 \usage{
-cross_bicoherence(x, y, z = y, dft_given = FALSE)
+cross_bicoherence(
+  x,
+  y,
+  z = y,
+  dft_given = FALSE,
+  mc = FALSE,
+  mc_cores = getOption("mc.cores", 2L)
+)
 }
 \arguments{
 \item{x}{Given 1st time series, as a data frame or matrix with which columns
@@ -17,6 +24,12 @@ If omitted, \code{y} is used instead.}
 
 \item{dft_given}{If TRUE, suppose that DFTs is given instead of time series
 data and skip the fast fourier transform. Default: FALSE.}
+
+\item{mc}{If \code{TRUE}, calculation is done in parallel computation.
+Defaults to \code{FALSE}.}
+
+\item{mc_cores}{The number of cores in use for parallel computation, passed
+\code{\link[parallel:mclapply]{parallel::mclapply}()} etc. as \code{mc.cores}.}
 }
 \value{
 A data frame including the following columns:
@@ -34,7 +47,7 @@ frequency pair.
 }
 }
 \description{
-Estimate cross-coherence from three real-valued time series data.
+Estimate cross-bicoherence from three real-valued time series data.
 }
 \examples{
 x <- seq_len(1280)
@@ -44,14 +57,16 @@ v3 <- sapply(x, function(x) {cos(2 * x) * cos(3 * x + 1)}) + rnorm(1280)
 m1 <- matrix(v1, nrow = 128)
 m2 <- matrix(v2, nrow = 128)
 m3 <- matrix(v3, nrow = 128)
-cross_bicoherence(m1, m2, m3)
+xbc1 <- cross_bicoherence(m1, m2, m3)
 
 d1 <- stats::mvfft(m1)
 d2 <- stats::mvfft(m2)
 d3 <- stats::mvfft(m3)
-cross_bicoherence(d1, d2, d3, dft_given = TRUE)
+xbc2 <- cross_bicoherence(d1, d2, d3, dft_given = TRUE)
+
+xbc3 <- cross_bicoherence(d1, d2, d3, dft_given = TRUE, mc = TRUE, mc_cores = 1L)
 
 }
 \references{
-K. S. Lii and K. N. Helland. 1981. Cross-Bispectrum Computation and Variance Estimation. ACM Trans. Math. Softw. 7, 3 (September 1981), 284–294. DOI:https://doi.org/10.1145/355958.355961
+Kim, Y.C., Powers, E.J., 1979. Digital Bispectral Analysis and Its Applications to Nonlinear Wave Interactions. IEEE Trans. Plasma Sci. 7, 120–131. https://doi.org/10.1109/TPS.1979.4317207
 }

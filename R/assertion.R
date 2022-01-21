@@ -1,6 +1,6 @@
 ## -*- mode: R -*-
 ##
-## Copyright (C) 2019-2021 Takeshi Abe <tabe@fixedpoint.jp>
+## Copyright (C) 2020 Takeshi Abe <tabe@fixedpoint.jp>
 ##
 ## This program is free software: you can redistribute it and/or modify
 ## it under the terms of the GNU General Public License as published by
@@ -15,7 +15,7 @@
 ## You should have received a copy of the GNU General Public License
 ## along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-.onAttach <- function(libname, pkgname) {
-    if (interactive())
-        packageStartupMessage(paste0("Welcome to rhosa v", utils::packageVersion("rhosa")))
+.assert <- function(condition) {
+    if (!all(condition))
+        stop("assertion unsatisfied")
 }

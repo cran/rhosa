@@ -20,7 +20,7 @@
 ##
 ## @param n the number of samples
 .generate_1st_quadrant <- function(n) {
-    stopifnot(length(n) == 1, n >= 1)
+    .assert(length(n) == 1 && n >= 1)
 
     if (n < 4) {
         data.frame(x1 = integer(), x2 = integer())
@@ -37,7 +37,7 @@
 ##
 ## @inheritParams .generate_1st_quadrant
 .generate_4th_quadrant <- function(n) {
-    stopifnot(length(n) == 1, n >= 1)
+    .assert(length(n) == 1 && n >= 1)
 
     if (n < 4) {
         data.frame(x1 = integer(), x2 = integer())
@@ -68,6 +68,10 @@
 #' If omitted, \code{y} is used instead.
 #' @param dft_given If TRUE, suppose that DFTs is given instead of time series
 #' data and skip the fast fourier transform. Default: FALSE.
+#' @param mc If \code{TRUE}, calculation is done in parallel computation.
+#' Defaults to \code{FALSE}.
+#' @param mc_cores The number of cores in use for parallel computation, passed
+#' \code{\link[parallel:mclapply]{parallel::mclapply}()} etc. as \code{mc.cores}.
 #'
 #' @return A data frame including the following columns:
 #' \describe{
@@ -93,16 +97,20 @@
 #' m1 <- matrix(v1, nrow = 128)
 #' m2 <- matrix(v2, nrow = 128)
 #' m3 <- matrix(v3, nrow = 128)
-#' cross_bispectrum(m1, m2, m3)
+#' xbs1 <- cross_bispectrum(m1, m2, m3)
 #'
 #' d1 <- stats::mvfft(m1)
 #' d2 <- stats::mvfft(m2)
 #' d3 <- stats::mvfft(m3)
-#' cross_bispectrum(d1, d2, d3, dft_given = TRUE)
+#' xbs2 <- cross_bispectrum(d1, d2, d3, dft_given = TRUE)
+#'
+#' xbs3 <- cross_bispectrum(d1, d2, d3, dft_given = TRUE, mc = TRUE, mc_cores = 1L)
 #'
 #' @export
 cross_bispectrum <- function(x, y, z = y,
-                             dft_given = FALSE) {
+                             dft_given = FALSE,
+                             mc = FALSE,
+                             mc_cores = getOption("mc.cores", 2L)) {
 
     ## Make data a matrix
     if (!is.matrix(x))
@@ -129,22 +137,32 @@ cross_bispectrum <- function(x, y, z = y,
 
     q1 <- .generate_1st_quadrant(V)
 
-    v1 <- vapply(seq_len(nrow(q1)), function(i) {
+    g1 <- function(i) {
         f1 <- q1$x1[i] + 1
         f2 <- q1$x2[i] + 1
         f3 <- q1$x1[i] + q1$x2[i] + 1
         mean(dft_x[f1,] * dft_y[f2,] * Conj(dft_z[f3,])) / ((2 * pi)^2 * V)
-    }, complex(1))
+    }
+
+    v1 <- if (mc)
+              simplify2array(parallel::mclapply(seq_len(nrow(q1)), g1, mc.cores = mc_cores))
+          else
+              vapply(seq_len(nrow(q1)), g1, complex(1))
 
     if (identical(y, z)) {
         r3 <- .generate_3rd_region(V)
 
-        v3 <- vapply(seq_len(nrow(r3)), function(i) {
+        g3 <- function(i) {
             f1 <- r3$x1[i] + 1
             f2 <- r3$x2[i] + 1
             f3 <- r3$x1[i] - r3$x2[i] + 1
             mean(dft_x[f1,] * Conj(dft_y[f2,]) * Conj(dft_z[f3,])) / ((2 * pi)^2 * V)
-        }, complex(1))
+        }
+
+        v3 <- if (mc)
+                  simplify2array(parallel::mclapply(seq_len(nrow(r3)), g3, mc.cores = mc_cores))
+              else
+                  vapply(seq_len(nrow(r3)), g3, complex(1))
 
         data.frame(f1 = c(q1$x1, r3$x1) / V,
                    f2 = c(q1$x2, -r3$x2) / V,
@@ -152,7 +170,7 @@ cross_bispectrum <- function(x, y, z = y,
     } else {
         q4 <- .generate_4th_quadrant(V)
 
-        v4 <- vapply(seq_len(nrow(q4)), function(i) {
+        g4 <- function(i) {
             f1 <- q4$x1[i] + 1
             f2 <- q4$x2[i] + 1
             if (q4$x1[i] > q4$x2[i]) { # in the 3rd or 4th region
@@ -162,7 +180,12 @@ cross_bispectrum <- function(x, y, z = y,
                 f3 <- q4$x2[i] - q4$x1[i] + 1
                 mean(dft_x[f1,] * Conj(dft_y[f2,]) * dft_z[f3,]) / ((2 * pi)^2 * V)
             }
-        }, complex(1))
+        }
+
+        v4 <- if (mc)
+                  simplify2array(parallel::mclapply(seq_len(nrow(q4)), g4, mc.cores = mc_cores))
+              else
+                  vapply(seq_len(nrow(q4)), g4, complex(1))
 
         data.frame(f1 = c(q1$x1, q4$x1) / V,
                    f2 = c(q1$x2, -q4$x2) / V,
@@ -170,9 +193,9 @@ cross_bispectrum <- function(x, y, z = y,
     }
 }
 
-#' Estimate cross-coherence from time series data.
+#' Estimate cross-bicoherence from time series data.
 #'
-#' Estimate cross-coherence from three real-valued time series data.
+#' Estimate cross-bicoherence from three real-valued time series data.
 #'
 #' @inheritParams cross_bispectrum
 #'
@@ -190,7 +213,10 @@ cross_bispectrum <- function(x, y, z = y,
 #' }
 #' }
 #'
-#' @inherit cross_bispectrum details references
+#' @inherit cross_bispectrum details
+#'
+#' @references
+#' Kim, Y.C., Powers, E.J., 1979. Digital Bispectral Analysis and Its Applications to Nonlinear Wave Interactions. IEEE Trans. Plasma Sci. 7, 120–131. https://doi.org/10.1109/TPS.1979.4317207
 #'
 #' @examples
 #' x <- seq_len(1280)
@@ -200,16 +226,20 @@ cross_bispectrum <- function(x, y, z = y,
 #' m1 <- matrix(v1, nrow = 128)
 #' m2 <- matrix(v2, nrow = 128)
 #' m3 <- matrix(v3, nrow = 128)
-#' cross_bicoherence(m1, m2, m3)
+#' xbc1 <- cross_bicoherence(m1, m2, m3)
 #'
 #' d1 <- stats::mvfft(m1)
 #' d2 <- stats::mvfft(m2)
 #' d3 <- stats::mvfft(m3)
-#' cross_bicoherence(d1, d2, d3, dft_given = TRUE)
+#' xbc2 <- cross_bicoherence(d1, d2, d3, dft_given = TRUE)
+#'
+#' xbc3 <- cross_bicoherence(d1, d2, d3, dft_given = TRUE, mc = TRUE, mc_cores = 1L)
 #'
 #' @export
 cross_bicoherence <- function(x, y, z = y,
-                              dft_given = FALSE) {
+                              dft_given = FALSE,
+                              mc = FALSE,
+                              mc_cores = getOption("mc.cores", 2L)) {
 
     ## Make data a matrix
     if (!is.matrix(x))
@@ -236,24 +266,36 @@ cross_bicoherence <- function(x, y, z = y,
 
     q1 <- .generate_1st_quadrant(V)
 
-    v1 <- vapply(seq_len(nrow(q1)), function(i) {
+    g1 <- function(i) {
         f1 <- q1$x1[i] + 1
         f2 <- q1$x2[i] + 1
         f3 <- q1$x1[i] + q1$x2[i] + 1
-        tp <- dft_x[f1,] * dft_y[f2,] * Conj(dft_z[f3,])
-        abs(sum(tp)) / sum(abs(tp))
-    }, numeric(1))
+        hp <- dft_x[f1,] * dft_y[f2,]
+        tp <- hp * Conj(dft_z[f3,])
+        abs(sum(tp))^2 / (sum(abs(hp)^2) * sum(abs(dft_z[f3,])^2))
+    }
+
+    v1 <- if (mc)
+              simplify2array(parallel::mclapply(seq_len(nrow(q1)), g1, mc.cores = mc_cores))
+          else
+              vapply(seq_len(nrow(q1)), g1, numeric(1))
 
     if (identical(y, z)) {
         r3 <- .generate_3rd_region(V)
 
-        v3 <- vapply(seq_len(nrow(r3)), function(i) {
+        g3 <- function(i) {
             f1 <- r3$x1[i] + 1
             f2 <- r3$x2[i] + 1
             f3 <- r3$x1[i] - r3$x2[i] + 1
-            tp <- dft_x[f1,] * Conj(dft_y[f2,]) * Conj(dft_z[f3,])
-            abs(sum(tp)) / sum(abs(tp))
-        }, numeric(1))
+            hp <- dft_x[f1,] * Conj(dft_y[f2,])
+            tp <- hp * Conj(dft_z[f3,])
+            abs(sum(tp))^2 / (sum(abs(hp)^2) * sum(abs(dft_z[f3,])^2))
+        }
+
+        v3 <- if (mc)
+                  simplify2array(parallel::mclapply(seq_len(nrow(r3)), g3, mc.cores = mc_cores))
+              else
+                  vapply(seq_len(nrow(r3)), g3, numeric(1))
 
         data.frame(f1 = c(q1$x1, r3$x1) / V,
                    f2 = c(q1$x2, -r3$x2) / V,
@@ -261,19 +303,25 @@ cross_bicoherence <- function(x, y, z = y,
     } else {
         q4 <- .generate_4th_quadrant(V)
 
-        v4 <- vapply(seq_len(nrow(q4)), function(i) {
+        g4 <- function(i) {
             f1 <- q4$x1[i] + 1
             f2 <- q4$x2[i] + 1
+            hp <- dft_x[f1,] * Conj(dft_y[f2,])
             if (q4$x1[i] > q4$x2[i]) { # in the 3rd or 4th region
                 f3 <- q4$x1[i] - q4$x2[i] + 1
-                tp <- dft_x[f1,] * Conj(dft_y[f2,]) * Conj(dft_z[f3,])
-                abs(sum(tp)) / sum(abs(tp))
+                tp <- hp * Conj(dft_z[f3,])
+                abs(sum(tp))^2 / (sum(abs(hp)^2) * sum(abs(dft_z[f3,])^2))
             } else { # in the 5th or 6th region
                 f3 <- q4$x2[i] - q4$x1[i] + 1
-                tp <- dft_x[f1,] * Conj(dft_y[f2,]) * dft_z[f3,]
-                abs(sum(tp)) / sum(abs(tp))
+                tp <- hp * dft_z[f3,]
+                abs(sum(tp))^2 / (sum(abs(hp)^2) * sum(abs(dft_z[f3,])^2))
             }
-        }, numeric(1))
+        }
+
+        v4 <- if (mc)
+                  simplify2array(parallel::mclapply(seq_len(nrow(q4)), g4, mc.cores = mc_cores))
+              else
+                  vapply(seq_len(nrow(q4)), g4, numeric(1))
 
         data.frame(f1 = c(q1$x1, q4$x1) / V,
                    f2 = c(q1$x2, -q4$x2) / V,

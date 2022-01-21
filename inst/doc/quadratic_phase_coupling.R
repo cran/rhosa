@@ -51,7 +51,8 @@ bc1 <- bicoherence(m1)
 ## ----sec1_heatmap_bc1, fig.cap = "`x1`'s estimated bicoherence.", fig.height = 4----
 heatmap_bicoherence <- function(bc) {
     ggplot(bc) +
-        geom_point(aes(f1, f2, colour = value), alpha = 0.5, size = 1) +
+        geom_raster(aes(f1, f2, fill = value)) +
+        coord_fixed() +
         scale_alpha(guide = "none")
 }
 
@@ -125,29 +126,30 @@ spectrum(d3)
 bc3 <- bicoherence(d3)
 heatmap_bicoherence(bc3)
 
-## ----sec2_heatmap_cb123, fig.cap = "The estimated cross-bicoherence between C1, C2, and C3.", fig.height = 4----
+## ----sec2_heatmap_cb123, fig.cap = "The estimated cross-bicoherence between C1, C2, and C3.", fig.height = 6----
 cb123 <- cross_bicoherence(d1, d2, d3)
 
 heatmap_cross_bicoherence <- function(cb) {
     ggplot(cb) +
-        geom_point(aes(f1, f2, colour = value), alpha = 0.5, size = 1) +
+        geom_raster(aes(f1, f2, fill = value)) +
+        coord_fixed() +
         scale_alpha(guide = "none")
 }
 
 heatmap_cross_bicoherence(cb123)
 
-## ----sec2_heatmap_cb312, fig.cap = "The estimated cross-bicoherencde between C3, C1, and C2.", fig.height = 4----
+## ----sec2_heatmap_cb312, fig.cap = "The estimated cross-bicoherencde between C3, C1, and C2.", fig.height = 6----
 cb312 <- cross_bicoherence(d3, d1, d2)
 heatmap_cross_bicoherence(cb312)
 
-## ----sec3_weak_coupling, fig.cap = "The case of weak coupling.", fig.height = 4----
+## ----sec3_weak_coupling, fig.cap = "The case of weak coupling.", fig.height = 6----
 Qcoef <- 0.01
 
 y2 <- sample_tc()
 cb2 <- cross_bicoherence(c1_data_frame(y2), c2_data_frame(y2), c3_data_frame(y2))
 heatmap_cross_bicoherence(cb2)
 
-## ----sec3_too_high_frequency, fig.cap = "The case of nearly-Nyquist frequency of `f1`.", fig.height = 4----
+## ----sec3_too_high_frequency, fig.cap = "The case of nearly-Nyquist frequency of `f1`.", fig.height = 6----
 Fcoef1 <- pi - 0.1
 Fcoef2 <- 2.3
 Fcoef3 <- 1.5
@@ -157,7 +159,7 @@ y3 <- sample_tc()
 cb3 <- cross_bicoherence(c1_data_frame(y3), c2_data_frame(y3), c3_data_frame(y3))
 heatmap_cross_bicoherence(cb3)
 
-## ----sec3_undersampling, fig.cap = "The case of insufficient sample.", fig.height = 4----
+## ----sec3_undersampling, fig.cap = "The case of insufficient sample.", fig.height = 6----
 Fcoef1 <- 1.2
 Fcoef2 <- 0.7
 Fcoef3 <- 0.8

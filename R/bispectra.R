@@ -23,7 +23,7 @@
 ## cycles/sample, and the normalized sample rate is 1.
 
 .generate_triangle <- function(n) {
-    stopifnot(length(n) == 1, n >= 1)
+    .assert(length(n) == 1 && n >= 1)
 
     ymax <- function(x) ifelse(x <= n / 3, x, n - 2 * x)
     xs <- 0:(n %/% 2)
@@ -54,7 +54,7 @@
         identity
     } else {
         f <- .named_window_function(h)
-        function(x) sapply(1:V, function(v) f(v / (V + 1)) * x[v])
+        function(x) vapply(1:V, function(v) f(v / (V + 1)) * x[v], complex(1))
     }
 }
 
@@ -71,7 +71,7 @@
     tdft <- stats::mvfft(tapered_data)
     function(x, l) {
         v <- x + 1
-        stopifnot(1 <= v, v <= V)
+        .assert(1 <= v && v <= V)
         tdft[v, l]
     }
 }
@@ -86,24 +86,31 @@
     }
 }
 
-.bispectrum <- function(L, V, h3, d, tr) {
+.bispectrum <- function(L, V, h3, d, tr,
+                        mc, mc_cores) {
     ## 3rd order periodogram of the l-th stretch
     ## Again, l is 1-based.
     ## See equation (A.5) in [1]'s Appendix A.
+    I3_denom <- ((2*pi)^2) * V * h3
     I3 <- function(lambda, mu, l) {
         r <- d(lambda, l) * d(mu, l) * Conj(d(lambda + mu, l))
-        r / (((2*pi)^2) * V * h3)
+        r / I3_denom
     }
 
     ## The estimate of the bispectrum
     ## See equation (A.6) in [1]'s Appendix A.
     f3 <- function(lambda, mu) {
-        mean(sapply(1:L, function(l) I3(lambda, mu, l)))
+        mean(vapply(1:L, function(l) I3(lambda, mu, l), complex(1)))
     }
+
+    value <- if (mc)
+                 parallel::mcmapply(f3, tr$x1, tr$x2, SIMPLIFY = TRUE, mc.cores = mc_cores)
+             else
+                 mapply(f3, tr$x1, tr$x2, SIMPLIFY = TRUE)
 
     data.frame(f1 = tr$x1 / V,
                f2 = tr$x2 / V,
-               value = mapply(f3, tr$x1, tr$x2, SIMPLIFY = TRUE))
+               value = value)
 }
 
 #' Estimate bispectrum from time series data.
@@ -117,6 +124,11 @@
 #'
 #' Currently the following window functions are available: Hamming window ("hamming"),
 #' Hann window ("hann"), and Blackman window ("blackman").
+#'
+#' @param mc If \code{TRUE}, calculation is done in parallel computation.
+#' Defaults to \code{FALSE}.
+#' @param mc_cores The number of cores in use for parallel computation, passed
+#' \code{\link[parallel:mclapply]{parallel::mcmapply}()} etc. as \code{mc.cores}.
 #'
 #' @return A data frame including the following columns:
 #' \describe{
@@ -142,11 +154,14 @@
 #' }
 #' v <- sapply(seq_len(1280), f) + rnorm(1280)
 #' m <- matrix(v, nrow = 128)
-#' bispectrum(m)
-#' bispectrum(m, "hamming")
+#' bs1 <- bispectrum(m)
+#' bs2 <- bispectrum(m, "hamming")
+#' bs3 <- bispectrum(m, "blackman", mc = TRUE, mc_cores = 1L)
 #'
 #' @export
-bispectrum <- function(data, window_function = NULL) {
+bispectrum <- function(data, window_function = NULL,
+                       mc = FALSE,
+                       mc_cores = getOption("mc.cores", 2L)) {
 
     ## Make data a matrix
     if (!is.matrix(data))
@@ -162,7 +177,7 @@ bispectrum <- function(data, window_function = NULL) {
     h3 <- .h(3, window_function)
     d <- .tdft(data, window_function, V)
     tr <- .generate_triangle(V)
-    .bispectrum(L, V, h3, d, tr)
+    .bispectrum(L, V, h3, d, tr, mc, mc_cores)
 }
 
 #' Estimate bicoherence from given time series data.
@@ -206,12 +221,15 @@ bispectrum <- function(data, window_function = NULL) {
 #' }
 #' v <- sapply(seq_len(1280), f) + rnorm(1280)
 #' m <- matrix(v, nrow = 128)
-#' bicoherence(m)
-#' bicoherence(m, "hamming")
+#' bc1 <- bicoherence(m)
+#' bc2 <- bicoherence(m, "hamming")
+#' bc3 <- bicoherence(m, "hann", mc = TRUE, mc_cores = 1L)
 #'
 #' @export
 bicoherence <- function(data,
                         window_function = NULL,
+                        mc = FALSE,
+                        mc_cores = getOption("mc.cores", 2L),
                         alpha = 0.05,
                         p_adjust_method = "BH") {
 
@@ -235,24 +253,25 @@ bicoherence <- function(data,
     ## 2nd order periodogram of the l-th strech
     ## Again, l is 1-based.
     ## The same as equation (5) in [1], but with adjusting taper's effect.
+    I2_denom <- 2*pi * V * h2
     I2 <- function(f, l) {
-        abs(d(f, l))^2 / (2*pi * V * h2)
+        abs(d(f, l))^2 / I2_denom
     }
 
     ## Estimate the power spectrum.
     ## See [1]'s definition of the estimated power spectrum.
     f2 <- function(f) {
-        stopifnot(length(f) == 1)
-        mean(sapply(1:L, function(l) I2(f, l)))
+        .assert(length(f) == 1)
+        mean(vapply(1:L, function(l) I2(f, l), numeric(1)))
     }
 
     denom <- function(x, y) {
-        stopifnot(length(x) == length(y))
+        .assert(length(x) == length(y))
         mapply(function(fx, fy) {f2(fx) * f2(fy) * f2(fx + fy)}, x, y)
     }
 
     tr <- .generate_triangle(V)
-    bs <- .bispectrum(L, V, h3, d, tr)
+    bs <- .bispectrum(L, V, h3, d, tr, mc, mc_cores)
     msbc <- abs(bs$value)^2 / denom(tr$x1, tr$x2)
 
     ## The mean of approximated distribution under null hypothesis that
